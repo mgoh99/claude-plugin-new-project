@@ -1,0 +1,5 @@
+{
+  "name": "new-project",
+  "version": "1.0.0",
+  "description": "Claude Code skill to scaffold a new Flask + Supabase + Vercel web application project"
+}

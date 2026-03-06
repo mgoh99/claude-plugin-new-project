@@ -69,9 +69,10 @@ Flask(__name__,
 2. Set up the Flask app with Vercel-compatible config
 3. Connect Supabase and create any needed tables (provide SQL migrations)
 4. Build out the routes, templates, and logic per the user's application requirements
-5. Make sure `vercel dev` works locally for testing
-6. Initialize a git repository
-7. Provide a clear README with setup and deployment steps
+5. Set the Flask development server to launch on a random port in the **5050–5999** range (e.g. `port = random.randint(5050, 5999)`). Print the chosen port to the console on startup so the user knows where to find the app.
+6. Make sure `vercel dev` works locally for testing
+7. Initialize a git repository
+8. Provide a clear README with setup and deployment steps
 
 ## Application Requirements
 

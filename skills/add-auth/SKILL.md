@@ -1,5 +1,5 @@
 ---
-name: flask-supabase-auth
+name: add-auth
 description: Add Supabase GoTrue authentication with Microsoft OAuth (Azure SSO) to any Flask project. Creates login page, auth module, password reset, and all supporting routes.
 argument-hint: [app-name]
 user-invocable: true

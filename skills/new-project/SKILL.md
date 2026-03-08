@@ -25,6 +25,13 @@ Ask the user which Tailwind option they prefer, and suggest one based on the pro
 
 If the user does not specify, use **Option 1** and mention they can switch to Option 2 later for production.
 
+## Authentication
+
+After gathering application requirements, ask the user: **"Does this app need user authentication (login/logout)?"**
+
+- If **yes**: after the project scaffold is complete, run the `add-auth` skill to add Supabase GoTrue authentication with Microsoft OAuth (Azure SSO). Pass the app name as the argument.
+- If **no**: skip auth setup entirely.
+
 ## Project Structure
 
 Create the following project structure in the current working directory:
@@ -74,15 +81,19 @@ Flask(__name__,
 
 ## Instructions
 
-1. Initialize the full project structure
-2. Set up the Flask app with Vercel-compatible config
-3. Connect Supabase and create any needed tables (provide SQL migrations)
-4. Set up Tailwind CSS per the chosen option (see above)
-5. Build out the routes, templates, and logic per the user's application requirements
-5. Set the Flask development server to launch on a random port in the **5050–5999** range (e.g. `port = random.randint(5050, 5999)`). Print the chosen port to the console on startup so the user knows where to find the app.
-6. Make sure `vercel dev` works locally for testing
-7. Initialize a git repository
-8. Provide a clear README with setup and deployment steps
+1. Ask the user to describe their app (if not provided via `$ARGUMENTS`)
+2. Ask which Tailwind option they prefer (suggest based on project type; default to Option 1)
+3. Ask if the app needs user authentication
+4. Initialize the full project structure
+5. Set up the Flask app with Vercel-compatible config
+6. Connect Supabase and create any needed tables (provide SQL migrations)
+7. Set up Tailwind CSS per the chosen option
+8. Build out the routes, templates, and logic per the user's application requirements
+9. Set the Flask development server to launch on a random port in the **5050–5999** range (e.g. `port = random.randint(5050, 5999)`). Print the chosen port to the console on startup so the user knows where to find the app.
+10. Make sure `vercel dev` works locally for testing
+11. If auth was requested, run the `add-auth` skill now
+12. Initialize a git repository
+13. Provide a clear README with setup and deployment steps
 
 ## Application Requirements
 

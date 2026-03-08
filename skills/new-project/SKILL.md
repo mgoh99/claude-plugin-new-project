@@ -1,7 +1,7 @@
 ---
 name: new-project
 description: Initialize a new Flask + Supabase + Vercel web application project from scratch. Use when starting a brand new project.
-argument-hint: [app-description]
+argument-hint: "app-description"
 user-invocable: true
 ---
 
@@ -11,10 +11,19 @@ You are starting a new web application project. The user will describe what the 
 
 | Layer                  | Technology                                     |
 | ---------------------- | ---------------------------------------------- |
-| **Frontend**           | Flask templates (Jinja2) with HTML / CSS / JS  |
+| **Frontend**           | Flask templates (Jinja2) with HTML / CSS / JS + Tailwind CSS |
 | **Backend**            | Python / Flask                                 |
 | **Database**           | Supabase (PostgreSQL + Supabase Python client) |
 | **Hosting/Deployment** | Vercel (via vercel-python runtime)             |
+
+## Tailwind CSS Setup
+
+Ask the user which Tailwind option they prefer, and suggest one based on the project type:
+
+- **Option 1 — CDN (default):** Add `<script src="https://cdn.tailwindcss.com"></script>` to `base.html`. No build step required. Suggest this for prototypes, internal tools, simple apps, or when the user hasn't specified.
+- **Option 2 — Tailwind CLI:** Install via `npm install -D tailwindcss`, configure `tailwind.config.js` to scan `templates/**/*.html`, and run the CLI to build into `static/css/style.css`. Add a `build:css` script to `package.json`. Suggest this for production apps, large projects, or apps with a custom design system where bundle size matters.
+
+If the user does not specify, use **Option 1** and mention they can switch to Option 2 later for production.
 
 ## Project Structure
 
@@ -68,7 +77,8 @@ Flask(__name__,
 1. Initialize the full project structure
 2. Set up the Flask app with Vercel-compatible config
 3. Connect Supabase and create any needed tables (provide SQL migrations)
-4. Build out the routes, templates, and logic per the user's application requirements
+4. Set up Tailwind CSS per the chosen option (see above)
+5. Build out the routes, templates, and logic per the user's application requirements
 5. Set the Flask development server to launch on a random port in the **5050–5999** range (e.g. `port = random.randint(5050, 5999)`). Print the chosen port to the console on startup so the user knows where to find the app.
 6. Make sure `vercel dev` works locally for testing
 7. Initialize a git repository

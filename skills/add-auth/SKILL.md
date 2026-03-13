@@ -9,9 +9,9 @@ You are adding authentication to an existing Flask project. The user may provide
 
 ## What This Creates
 
-A complete auth system matching the clear_view pattern:
+A complete auth system:
 
-1. **`auth.py`** — Supabase GoTrue REST auth module (no SDK)
+1. **`auth.py`** — Supabase GoTrue REST auth module (no SDK, no JWT secret)
 2. **Login page template** — Email/password + Microsoft OAuth button
 3. **Auth callback template** — Handles PKCE and recovery token flows client-side
 4. **Password reset template** — Set new password form
@@ -24,11 +24,12 @@ A complete auth system matching the clear_view pattern:
 ## Architecture
 
 - **No Supabase SDK** — direct REST calls with `requests` library and `apikey` header
-- **JWT verification** — local HS256 verification using `SUPABASE_JWT_SECRET`
-- **Token refresh** — automatic refresh on expiry without requiring re-login
+- **No JWT secret required** — token expiry tracked via `expires_at` stored in session (from Supabase login response); no local JWT verification
+- **Token refresh** — automatic refresh on expiry without requiring re-login (checks `time.time() >= expires_at`, no network call per request)
+- **Magic link / implicit flow** — calls `GET /auth/v1/user` once to validate token and get user info
 - **Azure SSO** — PKCE flow: `/auth/azure` → Azure redirect → `/auth/callback` → code exchange → session
 - **Password recovery** — Supabase emails magic link → `/auth/callback` extracts fragment → `/reset-password`
-- **Session** — Flask signed cookie stores `access_token`, `refresh_token`, `user_email`, `user_id`
+- **Session** — Flask signed cookie stores `access_token`, `refresh_token`, `expires_at`, `user_email`, `user_id`
 
 ## Step-by-Step Instructions
 
@@ -40,13 +41,13 @@ Create the auth module with these exact functions:
 """
 Supabase Auth module.
 Handles login, token verification, refresh, and the @login_required decorator.
-Uses Supabase GoTrue REST API (no SDK).
+Uses Supabase GoTrue REST API (no SDK). No JWT secret required.
 """
 
 import functools
-import jwt
+import time
 import requests
-from flask import session, redirect, url_for, request, render_template, jsonify
+from flask import session, redirect, url_for, request
 import config
 
 
@@ -62,8 +63,7 @@ def login_user(email, password):
         "apikey": config.SUPABASE_API_KEY,
         "Content-Type": "application/json",
     }
-    payload = {"email": email, "password": password}
-    resp = requests.post(url, json=payload, headers=headers, timeout=10)
+    resp = requests.post(url, json={"email": email, "password": password}, headers=headers, timeout=10)
 
     if resp.status_code != 200:
         content_type = resp.headers.get("content-type", "")
@@ -78,20 +78,23 @@ def login_user(email, password):
     return {
         "access_token": data["access_token"],
         "refresh_token": data["refresh_token"],
-        "expires_at": data.get("expires_at", 0),
+        "expires_at": data.get("expires_at", int(time.time()) + 3600),
         "user_email": data.get("user", {}).get("email", email),
         "user_id": data.get("user", {}).get("id", ""),
     }
 
 
-def verify_token(access_token):
-    """Locally verify a Supabase JWT using the JWT secret (HS256)."""
-    return jwt.decode(
-        access_token,
-        config.SUPABASE_JWT_SECRET,
-        algorithms=["HS256"],
-        audience="authenticated",
-    )
+def get_user_from_token(access_token):
+    """Fetch user info from Supabase using an access token."""
+    url = f"{config.SUPABASE_URL.rstrip('/')}/auth/v1/user"
+    headers = {
+        "apikey": config.SUPABASE_API_KEY,
+        "Authorization": f"Bearer {access_token}",
+    }
+    resp = requests.get(url, headers=headers, timeout=10)
+    if resp.status_code != 200:
+        raise AuthError("Invalid token")
+    return resp.json()
 
 
 def refresh_access_token(refresh_token):
@@ -101,8 +104,7 @@ def refresh_access_token(refresh_token):
         "apikey": config.SUPABASE_API_KEY,
         "Content-Type": "application/json",
     }
-    payload = {"refresh_token": refresh_token}
-    resp = requests.post(url, json=payload, headers=headers, timeout=10)
+    resp = requests.post(url, json={"refresh_token": refresh_token}, headers=headers, timeout=10)
 
     if resp.status_code != 200:
         raise AuthError("Session expired. Please log in again.")
@@ -111,7 +113,7 @@ def refresh_access_token(refresh_token):
     return {
         "access_token": data["access_token"],
         "refresh_token": data["refresh_token"],
-        "expires_at": data.get("expires_at", 0),
+        "expires_at": data.get("expires_at", int(time.time()) + 3600),
     }
 
 
@@ -123,8 +125,7 @@ def update_user_password(access_token, new_password):
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
-    payload = {"password": new_password}
-    resp = requests.put(url, json=payload, headers=headers, timeout=10)
+    resp = requests.put(url, json={"password": new_password}, headers=headers, timeout=10)
 
     if resp.status_code != 200:
         content_type = resp.headers.get("content-type", "")
@@ -150,26 +151,26 @@ def get_current_user():
 
 def login_required(f):
     """
-    Decorator that protects a route. Checks Flask session for a valid JWT.
-    If the token is expired, attempts a refresh. If refresh fails, redirects to /login.
+    Decorator that protects a route. Checks Flask session for a valid token.
+    Uses expires_at to detect expiry; attempts refresh before redirecting to /login.
     """
     @functools.wraps(f)
     def decorated(*args, **kwargs):
         access_token = session.get("access_token")
         refresh_token_val = session.get("refresh_token")
+        expires_at = session.get("expires_at", 0)
 
         if not access_token:
             session["next_url"] = request.url
             return redirect(url_for("login_page"))
 
-        try:
-            verify_token(access_token)
-        except jwt.ExpiredSignatureError:
+        if int(time.time()) >= expires_at:
             if refresh_token_val:
                 try:
                     new_tokens = refresh_access_token(refresh_token_val)
                     session["access_token"] = new_tokens["access_token"]
                     session["refresh_token"] = new_tokens["refresh_token"]
+                    session["expires_at"] = new_tokens["expires_at"]
                 except AuthError:
                     session.clear()
                     session["next_url"] = request.url
@@ -178,10 +179,6 @@ def login_required(f):
                 session.clear()
                 session["next_url"] = request.url
                 return redirect(url_for("login_page"))
-        except jwt.InvalidTokenError:
-            session.clear()
-            session["next_url"] = request.url
-            return redirect(url_for("login_page"))
 
         return f(*args, **kwargs)
 
@@ -637,9 +634,8 @@ import hashlib
 import secrets
 import base64
 from datetime import timedelta
-import requests as http_requests
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
-from auth import login_required, login_user, get_current_user, update_user_password, AuthError
+from auth import login_required, login_user, get_current_user, get_user_from_token, update_user_password, AuthError
 import config
 
 app = Flask(__name__)
@@ -668,6 +664,7 @@ def login_page():
         session.permanent = True
         session["access_token"] = tokens["access_token"]
         session["refresh_token"] = tokens["refresh_token"]
+        session["expires_at"] = tokens["expires_at"]
         session["user_email"] = tokens["user_email"]
         session["user_id"] = tokens["user_id"]
 
@@ -708,6 +705,7 @@ def auth_azure():
 @app.route("/auth/callback")
 def auth_callback():
     """Handle Supabase auth redirects (PKCE code or fragment-based tokens)."""
+    import requests as _requests
     code = request.args.get("code")
     if code:
         code_verifier = session.pop("pkce_code_verifier", "")
@@ -715,7 +713,7 @@ def auth_callback():
             return redirect(url_for("login_page", error="Session expired. Please try again."))
 
         supabase_url = config.SUPABASE_URL.rstrip("/")
-        resp = http_requests.post(
+        resp = _requests.post(
             f"{supabase_url}/auth/v1/token?grant_type=pkce",
             json={"auth_code": code, "code_verifier": code_verifier},
             headers={
@@ -739,6 +737,7 @@ def auth_callback():
         session.permanent = True
         session["access_token"] = data["access_token"]
         session["refresh_token"] = data.get("refresh_token", "")
+        session["expires_at"] = data.get("expires_at", 0)
         session["user_email"] = user.get("email", "")
         session["user_id"] = user.get("id", "")
 
@@ -751,6 +750,7 @@ def auth_callback():
 @app.route("/auth/exchange-code", methods=["POST"])
 def auth_exchange_code():
     """Exchange a PKCE auth code for tokens (called by auth_callback.html JS)."""
+    import requests as _requests
     data = request.get_json(force=True)
     code = data.get("code", "")
     if not code:
@@ -761,7 +761,7 @@ def auth_exchange_code():
         return jsonify({"error": "Session expired. Please try again."}), 400
 
     supabase_url = config.SUPABASE_URL.rstrip("/")
-    resp = http_requests.post(
+    resp = _requests.post(
         f"{supabase_url}/auth/v1/token?grant_type=pkce",
         json={"auth_code": code, "code_verifier": code_verifier},
         headers={
@@ -785,6 +785,7 @@ def auth_exchange_code():
     session.permanent = True
     session["access_token"] = tokens["access_token"]
     session["refresh_token"] = tokens.get("refresh_token", "")
+    session["expires_at"] = tokens.get("expires_at", 0)
     session["user_email"] = user.get("email", "")
     session["user_id"] = user.get("id", "")
 
@@ -795,8 +796,6 @@ def auth_exchange_code():
 @app.route("/auth/token-login", methods=["POST"])
 def auth_token_login():
     """Accept tokens directly (magic link / implicit flow) and set up the session."""
-    from auth import verify_token
-
     data = request.get_json(force=True)
     access_token = data.get("access_token", "")
     refresh_token_val = data.get("refresh_token", "")
@@ -805,12 +804,13 @@ def auth_token_login():
         return jsonify({"error": "No access token provided"}), 400
 
     try:
-        decoded = verify_token(access_token)
+        user = get_user_from_token(access_token)
         session.permanent = True
         session["access_token"] = access_token
         session["refresh_token"] = refresh_token_val
-        session["user_email"] = decoded.get("email", "")
-        session["user_id"] = decoded.get("sub", "")
+        session["expires_at"] = 0  # Will refresh on next request if expired
+        session["user_email"] = user.get("email", "")
+        session["user_id"] = user.get("id", "")
 
         next_url = session.pop("next_url", None) or url_for("index")  # Change to your home route
         return jsonify({"success": True, "redirect": next_url})
@@ -873,7 +873,7 @@ def access_denied_page():
     return render_template("access_denied.html")
 ```
 
-**Important**: Change all `url_for("index")` references to match the project's actual home page route name.
+**Important**: Change all `url_for("index")` references to match the project's actual home page route name. If the app already imports `requests`, use it directly instead of the `_requests` alias.
 
 ### 9. Update Config
 
@@ -887,7 +887,6 @@ load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_API_KEY = os.getenv("SUPABASE_API_KEY", "")
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "change-me-in-production")
 SESSION_LIFETIME_SECONDS = int(os.getenv("SESSION_LIFETIME_SECONDS", "86400"))
 ```
@@ -899,7 +898,6 @@ Add these variables to `.env.example`:
 ```
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_API_KEY=your-anon-key
-SUPABASE_JWT_SECRET=your-jwt-secret
 FLASK_SECRET_KEY=your-random-secret-key
 SESSION_LIFETIME_SECONDS=86400
 ```
@@ -912,8 +910,9 @@ Ensure these packages are listed:
 flask
 requests
 python-dotenv
-PyJWT
 ```
+
+No `PyJWT` needed — token expiry is tracked via `expires_at` from the Supabase response.
 
 ### 12. Protect Existing Routes
 
@@ -933,12 +932,14 @@ Tell the user they need to configure in their Supabase project:
 1. **Authentication > Providers > Azure**: Enable and configure with Azure AD app registration (Client ID, Client Secret, Tenant URL)
 2. **Authentication > URL Configuration**: Add the app's callback URL (`https://your-domain.com/auth/callback`) to Redirect URLs
 3. **Authentication > Email Templates**: Customize the password recovery email template if desired
-4. The JWT secret is found in Supabase Dashboard > Project Settings > API > JWT Secret
+
+Only two env vars are needed: `SUPABASE_URL` and `SUPABASE_API_KEY` (the anon/public key from Project Settings > API).
 
 ## Notes
 
 - This auth system does NOT use the Supabase Python SDK — it makes direct REST calls
+- No JWT secret required — expiry is tracked via `expires_at` stored in the session cookie
 - The PKCE flow is more secure than implicit flow for OAuth
 - Tokens are stored in Flask's signed session cookie (server-side secret)
-- The `@login_required` decorator handles token refresh transparently
-- The `role_required` decorator from clear_view is NOT included by default — add it if you need role-based access control
+- The `@login_required` decorator handles token refresh transparently with no network call per request
+- The `role_required` decorator is NOT included by default — add it if you need role-based access control

@@ -89,7 +89,7 @@ Flask(__name__,
 6. Connect Supabase and create any needed tables (provide SQL migrations)
 7. Set up Tailwind CSS per the chosen option
 8. Build out the routes, templates, and logic per the user's application requirements
-9. Set the Flask development server to launch on a random port in the **5050–5999** range (e.g. `port = random.randint(5050, 5999)`). Print the chosen port to the console on startup so the user knows where to find the app.
+9. Pick a single fixed port between **5050–5999** for this project and hardcode it. The port should not change between restarts.
 10. Use `python3` (not `python`) in all local run instructions, scripts, and README commands — the user is on macOS where `python3` is the correct command. Also use `pip3` instead of `pip` for package installation.
 11. Make sure `vercel dev` works locally for testing
 12. If auth was requested, run the `add-auth` skill now

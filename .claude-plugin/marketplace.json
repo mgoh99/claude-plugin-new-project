@@ -1,0 +1,18 @@
+{
+  "name": "clearspace-tools",
+  "owner": {
+    "name": "mgoh99"
+  },
+  "metadata": {
+    "description": "Flask project scaffolding and authentication skills for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "clearspace-code",
+      "source": "./plugins/clearspace-code",
+      "description": "Flask project scaffolding, local dev, and authentication skills",
+      "version": "1.0.0"
+    }
+  ]
+}

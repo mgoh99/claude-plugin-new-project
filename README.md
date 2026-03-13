@@ -1,52 +1,94 @@
-# New Project - Claude Code Plugin
+# Clearspace Tools
 
-A Claude Code skill that scaffolds a new **Flask + Supabase + Vercel** web application project from scratch.
+A Claude Code skill marketplace with plugins for scaffolding Flask web applications.
 
-## What It Does
+## Marketplace Structure
 
-When invoked, this skill instructs Claude to:
-
-1. Create a full project structure (Flask app, templates, static files, Supabase client)
-2. Configure Vercel deployment (`vercel.json`, serverless entry point)
-3. Set up Supabase connection with environment variables
-4. Build out routes, templates, and logic based on your app description
-5. Provide SQL migrations for any needed database tables
-6. Initialize a git repository
-7. Generate a README with setup and deployment steps
-
-## Tech Stack
-
-| Layer              | Technology                                     |
-| ------------------ | ---------------------------------------------- |
-| **Frontend**       | Flask templates (Jinja2) with HTML / CSS / JS  |
-| **Backend**        | Python / Flask                                 |
-| **Database**       | Supabase (PostgreSQL + Supabase Python client) |
-| **Hosting**        | Vercel (via vercel-python runtime)             |
+```
+clearspace-tools/
+├── plugins/
+│   └── clearspace-code/          # Plugin: Flask project skills
+│       ├── plugin.json
+│       └── skills/
+│           ├── new-project/      # Flask + Supabase + Vercel app
+│           ├── new-local-project/# Flask + SQLite local app
+│           └── add-auth/         # Supabase auth with Azure SSO
+└── README.md
+```
 
 ## Installation
 
+### Install the full plugin
+
+Clone the repo and copy the plugin's skills into your Claude Code config:
+
 ```bash
-claude plugin add github:mgoh99/claude-plugin-new-project
+git clone https://github.com/mgoh99/clearspace-tools.git
+cp -r clearspace-tools/plugins/clearspace-code/skills/* ~/.claude/skills/
 ```
 
-## Usage
+### Install a single skill
 
-In Claude Code, type:
+You can install individual skills directly from GitHub without cloning:
+
+**new-project** — Flask + Supabase + Vercel app scaffold:
+```bash
+mkdir -p ~/.claude/skills/new-project
+curl -o ~/.claude/skills/new-project/SKILL.md \
+  https://raw.githubusercontent.com/mgoh99/clearspace-tools/main/plugins/clearspace-code/skills/new-project/SKILL.md
+```
+
+**new-local-project** — Flask + SQLite local app scaffold:
+```bash
+mkdir -p ~/.claude/skills/new-local-project
+curl -o ~/.claude/skills/new-local-project/SKILL.md \
+  https://raw.githubusercontent.com/mgoh99/clearspace-tools/main/plugins/clearspace-code/skills/new-local-project/SKILL.md
+```
+
+**add-auth** — Supabase GoTrue auth with Microsoft OAuth:
+```bash
+mkdir -p ~/.claude/skills/add-auth
+curl -o ~/.claude/skills/add-auth/SKILL.md \
+  https://raw.githubusercontent.com/mgoh99/clearspace-tools/main/plugins/clearspace-code/skills/add-auth/SKILL.md
+```
+
+## Skills
+
+### `/new-project`
+
+Scaffolds a full **Flask + Supabase + Vercel** web application with:
+- Flask backend with Jinja2 templates
+- Supabase (PostgreSQL) database integration
+- Vercel deployment configuration
+- Tailwind CSS (CDN or CLI)
+- Optional authentication (via `add-auth`)
 
 ```
 /new-project A todo app with user authentication and task categories
 ```
 
-Or just `/new-project` with no arguments and Claude will ask you to describe your app.
+### `/new-local-project`
 
-## Manual Installation
+Scaffolds a **Flask + SQLite** app for local development with:
+- Flask backend with Jinja2 templates
+- SQLite database (no cloud services)
+- Tailwind CSS (CDN or CLI)
 
-If you prefer not to use the plugin system, copy the skill directly:
+```
+/new-local-project An inventory tracker for my home library
+```
 
-```bash
-mkdir -p ~/.claude/skills/new-project
-curl -o ~/.claude/skills/new-project/SKILL.md \
-  https://raw.githubusercontent.com/mgoh99/claude-plugin-new-project/main/skills/new-project/SKILL.md
+### `/add-auth`
+
+Adds **Supabase GoTrue authentication** with Microsoft OAuth (Azure SSO) to any existing Flask project:
+- Email/password login
+- Microsoft SSO via PKCE flow
+- Password reset
+- `@login_required` decorator
+- No Supabase SDK or JWT secret required
+
+```
+/add-auth MyAppName
 ```
 
 ## License
